@@ -1,6 +1,7 @@
 'use client'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useState, useRef } from 'react'
+import { Text } from '@react-three/drei'
+import { useState, useRef, useEffect } from 'react'
 import SafariBrowser from '@/components/SafariBrowser'
 import AnimatedBackground from '@/components/AnimatedBackground'
 
@@ -57,12 +58,66 @@ function CameraAnimator({ isTransitioning }) {
   return null
 }
 
-// New scene component (replace this with your actual new scene)
+// New scene component with interactive blobs
 function NewScene() {
+  const [hoveredBlob, setHoveredBlob] = useState(null)
+  const [scrollPosition, setScrollPosition] = useState(0)
+  const radius = 2 // Radius of the circular formation
+
+  const blobData = [
+    { text: "Book With Me", color: "#F8C8DC" },
+    { text: "Shop", color: "#AEC6CF" },
+    { text: "Flash", color: "#F5A623" }
+  ]
+
+  useEffect(() => {
+    const handleScroll = (e) => {
+      setScrollPosition(prev => {
+        const newPosition = prev + e.deltaY * 0.001
+        return newPosition
+      })
+    }
+
+    window.addEventListener('wheel', handleScroll)
+    return () => window.removeEventListener('wheel', handleScroll)
+  }, [])
+
   return (
-    <mesh position={[0, -10, 0]}>
-      <boxGeometry args={[2, 2, 2]} />
-      <meshStandardMaterial color="hotpink" />
-    </mesh>
+    <group position={[0, -10, 0]}>
+      {blobData.map((blob, index) => {
+        const angle = (index * (2 * Math.PI / 3)) + scrollPosition
+        const x = Math.sin(angle) * radius
+        const z = Math.cos(angle) * radius
+
+        return (
+          <group 
+            key={index} 
+            position={[x, 0, z]}
+            rotation={[0, -angle, 0]} // Rotate to face center
+          >
+            <mesh
+              onPointerOver={() => setHoveredBlob(index)}
+              onPointerOut={() => setHoveredBlob(null)}
+              scale={hoveredBlob === index ? 1.15 : 1}
+            >
+              <sphereGeometry args={[0.75, 32, 32]} />
+              <meshStandardMaterial
+                color={blob.color}
+              />
+            </mesh>
+            <Text
+              position={[0, 0, 0]}
+              fontSize={0.15}
+              color="black"
+              anchorX="center"
+              anchorY="center"
+              rotation={[0, Math.PI / 2, 0]} // Rotate text to be perpendicular to sphere surface
+            >
+              {blob.text}
+            </Text>
+          </group>
+        )
+      })}
+    </group>
   )
 }
