@@ -1,22 +1,47 @@
 import { useRef, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
 import { RoundedBox, Text } from '@react-three/drei'
-import Popup from './Popup'
+import { useThree } from '@react-three/fiber'
 
-export default function SafariBrowser() {
+export default function SafariBrowser({ onMenuClick }) {
   const browserRef = useRef()
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const { camera } = useThree()
 
-  useFrame((state, delta) => {
-    browserRef.current.rotation.y += delta * 0.0
-  })
+  const handlePointerDown = (e) => {
+    e.stopPropagation()
+    setIsDragging(true)
+    setDragStart({
+      x: e.point.x - browserRef.current.position.x,
+      y: e.point.y - browserRef.current.position.y
+    })
+  }
 
-  const handleMenuClick = () => {
-    setIsMenuOpen(!isMenuOpen)
+  const handlePointerMove = (e) => {
+    if (isDragging) {
+      e.stopPropagation()
+      browserRef.current.position.x = e.point.x - dragStart.x
+      browserRef.current.position.y = e.point.y - dragStart.y
+    }
+  }
+
+  const handlePointerUp = () => {
+    setIsDragging(false)
+  }
+
+  const handleMenuClick = (e) => {
+    e.stopPropagation()
+    onMenuClick && onMenuClick()
   }
 
   return (
-    <group ref={browserRef}>
+    <group 
+      ref={browserRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+    >
       {/* Main browser window */}
       <RoundedBox args={[4, 2.5, 0.1]} radius={0.05} smoothness={4}>
         <meshStandardMaterial color="#ffffff" />
@@ -28,7 +53,7 @@ export default function SafariBrowser() {
       </RoundedBox>
       
       {/* Traffic lights */}
-      <group position={[-1.7, 1.05, 0.1]}>
+      <group position={[-1.7, 1.05, 0.05]}>
         <mesh position={[-0.15, 0, 0]}>
           <sphereGeometry args={[0.06, 32, 32]} />
           <meshStandardMaterial color="#ff5f57" />
@@ -44,7 +69,7 @@ export default function SafariBrowser() {
       </group>
 
       {/* Menu Button */}
-      <group position={[0, 0, 0.1]} onClick={handleMenuClick}>
+      <group position={[0, 0, 0.065]} onClick={handleMenuClick}>
         <RoundedBox args={[1, 0.4, 0.05]} radius={0.05} smoothness={4}>
           <meshStandardMaterial color="#007AFF" />
         </RoundedBox>
@@ -58,30 +83,6 @@ export default function SafariBrowser() {
           MENU
         </Text>
       </group>
-
-      {/* Popup Windows */}
-      {isMenuOpen && (
-        <group>
-          <Popup
-            initialPosition={[-2, 0, 1]}
-            size={[1.2, 2, 0.05]}
-            color="#FFC5D3"
-            text="Book With ME!"
-          />
-          <Popup
-            initialPosition={[0, .5, 1.25]}
-            size={[1.2, 1.2, 0.05]}
-            color="#7ABDE5"
-            text="MY FLASH"
-          />
-          <Popup
-            initialPosition={[2, -.5, .5]}
-            size={[2, 1, 0.05]}
-            color="#305CDE"
-            text="SHOP"
-          />
-        </group>
-      )}
     </group>
   )
-} 
+}

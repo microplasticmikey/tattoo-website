@@ -1,96 +1,162 @@
 'use client'
+import * as THREE from 'three';
 import { useEffect, useRef } from 'react'
 
 export default function AnimatedBackground() {
-  const canvasRef = useRef(null)
+  const containerRef = useRef(null);
+  const sceneRef = useRef(null);
+  const rendererRef = useRef(null);
+  const cameraRef = useRef(null);
+  const scribbleRef = useRef(null);
+  const progressRef = useRef(0);
+  const frameIdRef = useRef(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')
+    // Scene setup
+    sceneRef.current = new THREE.Scene();
+    
+    // Camera setup
+    const aspect = window.innerWidth / window.innerHeight;
+    cameraRef.current = new THREE.OrthographicCamera(
+      window.innerWidth / -2,
+      window.innerWidth / 2,
+      window.innerHeight / 2,
+      window.innerHeight / -2,
+      1,
+      1000
+    );
+    cameraRef.current.position.z = 5;
 
-    // Function to set canvas size
-    const setCanvasSize = () => {
-      const dpr = window.devicePixelRatio || 1
-      const rect = canvas.getBoundingClientRect()
+    // Renderer setup
+    rendererRef.current = new THREE.WebGLRenderer({ alpha: true });
+    rendererRef.current.setSize(window.innerWidth, window.innerHeight);
+    rendererRef.current.setClearColor(0xffffff, 0);
+
+    // Create scribble lines
+    const scribblePoints = generateScribblePoints(100);
+    const positions = new Float32Array(scribblePoints.length * 6);
+    const indices = new Uint16Array((scribblePoints.length - 1) * 6);
+    
+    // Create vertices for thick lines
+    const lineThickness = 15; // Uniform thickness value
+    for (let i = 0; i < scribblePoints.length; i++) {
+      const point = scribblePoints[i];
+      const nextPoint = scribblePoints[i + 1];
       
-      canvas.width = rect.width * dpr
-      canvas.height = rect.height * dpr
+      // Calculate direction vector for thickness
+      let dirX = 0;
+      let dirY = 1;
       
-      ctx.scale(dpr, dpr)
-      canvas.style.width = `${rect.width}px`
-      canvas.style.height = `${rect.height}px`
+      if (i < scribblePoints.length - 1) {
+        // Calculate perpendicular direction for line segment
+        const dx = nextPoint.x - point.x;
+        const dy = nextPoint.y - point.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        dirX = -dy / length;
+        dirY = dx / length;
+      }
+      
+      // Set vertices with uniform thickness
+      positions[i * 6] = point.x + dirX * lineThickness;
+      positions[i * 6 + 1] = point.y + dirY * lineThickness;
+      positions[i * 6 + 2] = point.z;
+      positions[i * 6 + 3] = point.x - dirX * lineThickness;
+      positions[i * 6 + 4] = point.y - dirY * lineThickness;
+      positions[i * 6 + 5] = point.z;
     }
-
-    setCanvasSize()
-
-    // Set initial canvas background to white
-    ctx.fillStyle = 'white'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-    let startTime = null
-    const duration = 2000 // 2 seconds
-    let lastX = canvas.width / (2 * (window.devicePixelRatio || 1))
-    let lastY = canvas.height / (2 * (window.devicePixelRatio || 1))
-
-    function animate(currentTime) {
-      if (!startTime) startTime = currentTime
-      const elapsed = currentTime - startTime
-      const progress = elapsed / duration
-
-      if (progress < 1) {
-        // Draw multiple lines per frame for faster effect
-        for (let i = 0; i < 8; i++) {
-          ctx.beginPath()
-          ctx.moveTo(lastX, lastY)
-
-          // Generate new random point with bounds checking
-          const angle = Math.random() * Math.PI * 2
-          const radius = Math.random() * (Math.min(canvas.width, canvas.height) / 10)
-          let newX = lastX + Math.cos(angle) * radius
-          let newY = lastY + Math.sin(angle) * radius
-
-          // Keep points within bounds with padding
-          const padding = 20
-          newX = Math.max(padding, Math.min(newX, canvas.width / (window.devicePixelRatio || 1) - padding))
-          newY = Math.max(padding, Math.min(newY, canvas.height / (window.devicePixelRatio || 1) - padding))
-
-          // Draw line
-          ctx.lineTo(newX, newY)
-          ctx.strokeStyle = '#FFEE8C'
-          
-          // Adjust line width based on screen size
-          const baseWidth = Math.min(canvas.width, canvas.height) / 50
-          ctx.lineWidth = Math.max(10, Math.min(20, baseWidth))
-          
-          ctx.lineCap = 'round'
-          ctx.stroke()
-
-          // Update last position
-          lastX = newX
-          lastY = newY
-        }
-
-        requestAnimationFrame(animate)
-      } 
+    
+    // Create indices for triangles
+    for (let i = 0; i < scribblePoints.length - 1; i++) {
+      const index = i * 6;
+      indices[index] = i * 2;
+      indices[index + 1] = i * 2 + 1;
+      indices[index + 2] = (i + 1) * 2;
+      indices[index + 3] = (i + 1) * 2;
+      indices[index + 4] = i * 2 + 1;
+      indices[index + 5] = (i + 1) * 2 + 1;
     }
+    
+    const scribbleGeometry = new THREE.BufferGeometry();
+    scribbleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    scribbleGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    
+    const scribbleMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xFFEE8C,
+      side: THREE.DoubleSide
+    });
+    
+    scribbleRef.current = new THREE.Mesh(scribbleGeometry, scribbleMaterial);
+    sceneRef.current.add(scribbleRef.current);
 
-    requestAnimationFrame(animate)
+    // Animation function
+    const animate = () => {
+      if (progressRef.current < scribblePoints.length) {
+        scribbleGeometry.setDrawRange(0, progressRef.current);
+        progressRef.current += 1;
+      }
 
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
+      frameIdRef.current = requestAnimationFrame(animate);
+    };
+
+    // Handle window resize
     const handleResize = () => {
-      const prevFillStyle = ctx.fillStyle
-      setCanvasSize()
-      ctx.fillStyle = prevFillStyle
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      
+      rendererRef.current.setSize(width, height);
+      
+      cameraRef.current.left = -width / 2;
+      cameraRef.current.right = width / 2;
+      cameraRef.current.top = height / 2;
+      cameraRef.current.bottom = -height / 2;
+      cameraRef.current.updateProjectionMatrix();
+    };
+
+    // Mount renderer to container
+    const container = containerRef.current;
+    if (container) {
+      container.appendChild(rendererRef.current.domElement);
     }
 
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
+    window.addEventListener('resize', handleResize);
+    frameIdRef.current = requestAnimationFrame(animate);
+
+    // Cleanup
+    return () => {
+      if (frameIdRef.current) {
+        cancelAnimationFrame(frameIdRef.current);
+      }
+      if (rendererRef.current && container) {
+        container.removeChild(rendererRef.current.domElement);
+        rendererRef.current.dispose();
+      }
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 z-0 w-full h-full"
+    <div 
+      ref={containerRef}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: -1,
+        pointerEvents: 'none'
+      }}
     />
-  )
-} 
+  );
+}
+
+function generateScribblePoints(numPoints) {
+  const points = [];
+  for (let i = 0; i < numPoints; i++) {
+    const x = (Math.random() - 0.5) * window.innerWidth;
+    const y = (Math.random() - 0.5) * window.innerHeight;
+    points.push(new THREE.Vector3(x, y, 0));
+  }
+  return points;
+}
